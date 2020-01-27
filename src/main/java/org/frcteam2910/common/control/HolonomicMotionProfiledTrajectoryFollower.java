@@ -45,7 +45,7 @@ public class HolonomicMotionProfiledTrajectoryFollower extends TrajectoryFollowe
 
         forwardController.setSetpoint(lastState.getPathState().getPosition().x);
         strafeController.setSetpoint(lastState.getPathState().getPosition().y);
-        rotationController.setSetpoint(lastState.getPathState().getRotation().toRadians());
+        rotationController.setSetpoint(lastState.getRotation().toRadians());
 
         return new HolonomicDriveSignal(
                 new Vector2(

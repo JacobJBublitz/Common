@@ -31,7 +31,6 @@ public class PathIoTests {
             assertEquals("Distance does not match", expected.getDistance(), actual.getDistance(), MathUtils.EPSILON);
             assertEquals("Heading does not match", expected.getHeading(), actual.getHeading());
             assertEquals("Position does not match", expected.getPosition(), actual.getPosition());
-            assertEquals("Rotation does not match", expected.getRotation(), actual.getRotation());
         }
     }
 

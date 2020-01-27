@@ -15,17 +15,17 @@ public class Main {
         Path path = new SplinePathBuilder(Vector2.ZERO, Rotation2.ZERO, Rotation2.ZERO)
                 // When using hermite splines we must specify a position and a heading. We can also optionally specify
                 // a rotation.
-                .hermite(new Vector2(100.0, 100.0), Rotation2.ZERO, Rotation2.fromDegrees(90.0))
-                .hermite(new Vector2(50.0, 50.0), Rotation2.fromDegrees(180.0), Rotation2.ZERO)
+                .hermite(new Vector2(100.0 * 12.0, 100.0 * 12.0), Rotation2.ZERO, Rotation2.fromDegrees(90.0))
+                .hermite(new Vector2(50.0 * 12.0, 50.0 * 12.0), Rotation2.fromDegrees(180.0), Rotation2.ZERO)
                 // Once we've added all the splines we can then build the path.
                 .build();
 
         // Once we have our path we need to then specify some constraints for our trajectory.
         TrajectoryConstraint[] constraints = {
                 // Lets specify a maximum acceleration of 10.0 units/s^2
-                new MaxAccelerationConstraint(10.0),
-                // And lets have a maximum velocity of 12.0 units/s
-                new MaxVelocityConstraint(12.0)
+                new MaxAccelerationConstraint(10.0 * 12.0),
+                new CentripetalAccelerationConstraint(5.0 * 12.0),
+                new FeedforwardConstraint(11.0, 0.058, 0.00742, false),
         };
 
         // Now that we have both our path and our constraints we can create a trajectory.
@@ -63,7 +63,7 @@ public class Main {
                         state.getPathState().getPosition().x,
                         state.getPathState().getPosition().y,
                         state.getPathState().getHeading().toDegrees(),
-                        state.getPathState().getRotation().toDegrees(),
+                        state.getRotation().toDegrees(),
                         state.getPathState().getCurvature(),
                         state.getVelocity(),
                         state.getAcceleration()

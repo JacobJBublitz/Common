@@ -69,7 +69,6 @@ public class Path {
                 distance,
                 state.getPosition(),
                 state.getHeading(),
-                rotationMap.getInterpolated(new InterpolatingDouble(distance)),
                 state.getCurvature()
         );
     }
@@ -90,14 +89,12 @@ public class Path {
         private final double distance;
         private final Vector2 position;
         private final Rotation2 heading;
-        private final Rotation2 rotation;
         private final double curvature;
 
-        public State(double distance, Vector2 position, Rotation2 heading, Rotation2 rotation, double curvature) {
+        public State(double distance, Vector2 position, Rotation2 heading, double curvature) {
             this.distance = distance;
             this.position = position;
             this.heading = heading;
-            this.rotation = rotation;
             this.curvature = curvature;
         }
 
@@ -111,10 +108,6 @@ public class Path {
 
         public Rotation2 getHeading() {
             return heading;
-        }
-
-        public Rotation2 getRotation() {
-            return rotation;
         }
 
         public double getCurvature() {
