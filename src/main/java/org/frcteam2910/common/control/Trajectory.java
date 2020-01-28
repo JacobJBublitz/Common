@@ -21,6 +21,8 @@ public class Trajectory {
         initialForwardPass(0.0, trajectoryConstraints, sampleDistance);
         initialReversePass(0.0, trajectoryConstraints);
 
+        rotationForwardPass(trajectoryConstraints);
+
         pathStateStartTimes = new double[constrainedPathStates.size()];
 
         double duration = 0.0;
@@ -39,7 +41,6 @@ public class Trajectory {
                 0.0,
                 trajectoryStartingVelocity,
                 0.0,
-                path.getRotationMap().firstEntry().getValue(),
                 0.0,
                 0.0,
                 0.0
@@ -64,7 +65,6 @@ public class Trajectory {
                     lastState.endingVelocity,
                     maxProfileEndVelocity,
                     0.0,
-                    Rotation2.ZERO,
                     0.0,
                     0.0,
                     0.0
@@ -155,6 +155,94 @@ public class Trajectory {
         }
     }
 
+    private void rotationForwardPass(TrajectoryConstraint[] constraints) {
+        var rotationEntry = path.getRotationMap().firstEntry();
+
+        ConstrainedPathState lastState = null;
+        for (int i = 0; i < constrainedPathStates.size(); i++) {
+            var state = constrainedPathStates.get(i);
+            if (lastState == null) {
+                state.startingRotation = rotationEntry.getValue().toRadians();
+                state.startingAngularVelocity = 0.0;
+            } else {
+                state.startingRotation = lastState.getEndingRotation();
+                state.startingAngularVelocity = lastState.getEndingAngularVelocity();
+            }
+
+            if (rotationEntry.getKey().value <= state.pathState.getDistance()) {
+                var nextEntry = path.getRotationMap().higherEntry(rotationEntry.getKey());
+                if (nextEntry != null) {
+                    state.startingRotation = rotationEntry.getValue().toRadians();
+                    rotationEntry = nextEntry;
+                }
+            }
+
+            double maxDeltaRotation = rotationEntry.getValue().toRadians() - state.startingRotation;
+            if (maxDeltaRotation >= Math.PI) {
+                maxDeltaRotation -= 2.0 * Math.PI;
+            } else if (maxDeltaRotation < -Math.PI) {
+                maxDeltaRotation += 2.0 * Math.PI;
+            }
+            double optimalAngularVelocity = maxDeltaRotation / state.getDuration();
+
+            double maxProfileEndAngularVelocity = Arrays.stream(constraints)
+                    .mapToDouble(c -> c.getMaxAngularVelocity(state.pathState, state.startingVelocity))
+                    .min().orElseThrow();
+
+            double maxDeltaAngularVelocity = Math.copySign(Math.min(maxProfileEndAngularVelocity, Math.abs(optimalAngularVelocity)), optimalAngularVelocity) - state.startingAngularVelocity;
+
+            double optimalAngularAcceleration = Math.pow(maxDeltaAngularVelocity, 2.0) / (2.0 * state.length) + (state.startingAngularVelocity / state.length) * maxDeltaAngularVelocity;
+            if (MathUtils.epsilonEquals(optimalAngularAcceleration, 0.0)) {
+                // We are neither accelerating or decelerating
+                state.angularAcceleration = 0.0;
+            } else {
+                double maxStartingAngularAcceleration = Arrays.stream(constraints)
+                        .mapToDouble(c -> c.getMaxAngularAcceleration(state.pathState, state.startingVelocity, state.startingAngularVelocity))
+                        .min().orElseThrow();
+                double maxEndingAngularAcceleration = Arrays.stream(constraints)
+                        .mapToDouble(c -> c.getMaxAngularAcceleration(state.getEndingPathState(), state.endingVelocity, state.startingAngularVelocity))
+                        .min().orElseThrow();
+
+                // Take the lower of the two accelerations
+                state.angularAcceleration = Math.min(maxStartingAngularAcceleration, maxEndingAngularAcceleration);
+
+                // Use the optimal acceleration if we can
+                state.angularAcceleration = Math.min(state.angularAcceleration, Math.abs(optimalAngularAcceleration));
+
+                state.angularAcceleration = Math.copySign(state.angularAcceleration, optimalAngularAcceleration);
+            }
+
+            lastState = state;
+        }
+    }
+
+    private void rotationReversePass(TrajectoryConstraint[] constraints) {
+        ConstrainedPathState lastState = null;
+        for (int i = constrainedPathStates.size() - 1; i >= 0; i--) {
+            var state = constrainedPathStates.get(i);
+
+            double endingAngularVelocity = lastState != null ? lastState.startingAngularVelocity : 0.0;
+
+            // Check if we are decelerating
+            double deltaAngularVelocity = endingAngularVelocity - state.startingAngularVelocity;
+            if (deltaAngularVelocity > 0.0) {
+                // If we are not decelerating skip this state
+                continue;
+            }
+
+            double deceleration = Arrays.stream(constraints)
+                    .mapToDouble(c -> c.getMaxAngularAcceleration(state.pathState, state.getEndingVelocity(), endingAngularVelocity))
+                    .min().orElseThrow();
+            // Find out how long it takes us to decelerate to the ending angular velocity
+            double decelTime = deltaAngularVelocity / -deceleration;
+
+            // Find how far we travel while decelerating
+            double decelDist = 0.5 * deceleration * Math.pow(decelTime, 2.0) + endingAngularVelocity * decelTime;
+
+            lastState = state;
+        }
+    }
+
     public State calculate(double time) {
         int start = 0;
         int end = constrainedPathStates.size() - 1;
@@ -190,13 +278,12 @@ public class Trajectory {
         public double endingVelocity;
         public double acceleration;
 
-        public Rotation2 startingRotation;
+        public double startingRotation;
         public double startingAngularVelocity;
-        public double endingAngularVelocity;
         public double angularAcceleration;
 
         public ConstrainedPathState(Path.State pathState, double length, double startingVelocity, double endingVelocity, double acceleration,
-                                    Rotation2 startingRotation, double startingAngularVelocity, double endingAngularVelocity, double angularAcceleration) {
+                                    double startingRotation, double startingAngularVelocity, double angularAcceleration) {
             this.pathState = pathState;
             this.length = length;
             this.startingVelocity = startingVelocity;
@@ -205,7 +292,6 @@ public class Trajectory {
 
             this.startingRotation = startingRotation;
             this.startingAngularVelocity = startingAngularVelocity;
-            this.endingAngularVelocity = endingAngularVelocity;
             this.angularAcceleration = angularAcceleration;
         }
 
@@ -227,19 +313,36 @@ public class Trajectory {
             }
         }
 
+        public Path.State getEndingPathState() {
+            double duration = getDuration();
+            double distance = 0.5 * acceleration * Math.pow(duration, 2.0) + startingVelocity * duration + pathState.getDistance();
+            return path.calculate(distance);
+        }
+
+        public double getEndingVelocity() {
+            return endingVelocity;
+        }
+
+        public double getEndingRotation() {
+            double duration = getDuration();
+            return 0.5 * angularAcceleration * duration * duration + startingAngularVelocity * duration + startingRotation;
+        }
+
+        public double getEndingAngularVelocity() {
+            return angularAcceleration * getDuration() + startingAngularVelocity;
+        }
+
         public State calculate(double time) {
             time = MathUtils.clamp(time, 0.0, getDuration());
 
             double distance = 0.5 * acceleration * Math.pow(time, 2.0) + startingVelocity * time + pathState.getDistance();
-
-            Rotation2 rotation = startingRotation.rotateBy(
-                    Rotation2.fromRadians(0.5 * angularAcceleration * Math.pow(time, 2.0) + startingAngularVelocity * time)
-            );
+            double rotation =
+                    0.5 * angularAcceleration * Math.pow(time, 2.0) + startingAngularVelocity * time + startingRotation;
             return new State(
                     path.calculate(distance),
                     acceleration * time + startingVelocity,
                     acceleration,
-                    rotation,
+                    Rotation2.fromRadians(rotation),
                     angularAcceleration * time + startingAngularVelocity,
                     angularAcceleration
             );

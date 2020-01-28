@@ -32,4 +32,8 @@ public abstract class TrajectoryConstraint {
     public double getMaxDeceleration(Path.State state, double velocity) {
         return getMaxAcceleration(state, velocity);
     }
+
+    public double getMaxAngularVelocity(Path.State state, double velocity) { return Double.POSITIVE_INFINITY; }
+
+    public double getMaxAngularAcceleration(Path.State state, double velocity, double angularVelocity) { return Double.POSITIVE_INFINITY; }
 }

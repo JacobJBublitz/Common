@@ -26,6 +26,8 @@ public class Main {
                 new MaxAccelerationConstraint(10.0 * 12.0),
                 new CentripetalAccelerationConstraint(5.0 * 12.0),
                 new FeedforwardConstraint(11.0, 0.058, 0.00742, false),
+                new MaxAngularVelocityConstraint(Math.toRadians(10.0)),
+                new MaxAngularAccelerationConstraint(Math.toRadians(50.0))
         };
 
         // Now that we have both our path and our constraints we can create a trajectory.
@@ -34,7 +36,7 @@ public class Main {
         // determines how often the trajectory makes sure that the velocity and acceleration are within
         // the limits determined by the constraints. Smaller values will create a smoother and more accurate path
         // but they will take much longer to generate.
-        Trajectory trajectory = new Trajectory(path, constraints, 1.0e-2);
+        Trajectory trajectory = new Trajectory(path, constraints, 1.0);
 
         // Now that we have our trajectory lets evaluate it at a 5ms sample period and save it to a csv.
         try (CSVPrinter printer = new CSVPrinter(new FileWriter("trajectory.csv"), CSVFormat.RFC4180)) {
@@ -45,10 +47,12 @@ public class Main {
                     "x",
                     "y",
                     "heading",
-                    "rotation",
                     "curvature",
                     "velocity",
-                    "acceleration"
+                    "acceleration",
+                    "rotation",
+                    "angularVelocity",
+                    "angularAcceleration"
             );
 
             int samples = (int) Math.ceil(trajectory.getDuration() / 5.0e-3);
@@ -63,10 +67,12 @@ public class Main {
                         state.getPathState().getPosition().x,
                         state.getPathState().getPosition().y,
                         state.getPathState().getHeading().toDegrees(),
-                        state.getRotation().toDegrees(),
                         state.getPathState().getCurvature(),
                         state.getVelocity(),
-                        state.getAcceleration()
+                        state.getAcceleration(),
+                        state.getRotation().toDegrees(),
+                        Math.toDegrees(state.getAngularVelocity()),
+                        Math.toDegrees(state.getAngularAcceleration())
                 );
             }
         } catch (IOException e) {
